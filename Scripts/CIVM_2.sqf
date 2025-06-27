@@ -3,9 +3,7 @@ private _supplyBox = createVehicle ["IG_supplyCrate_F", position player, [], 5, 
 _supplyBox allowDamage false;
 
 // Get current reputation score
-private _reputationMarkers = allMapMarkers select {markerColor _x == "Color4_FD_F"};
-private _reputationMarker = _reputationMarkers select 0;
-private _reputationScore = parseNumber (markerText _reputationMarker);  
+private _reputationScore = FLO_ReputationHandle get "value";  
 
 // Find a random building within 5km for delivery location
 private _deliveryLocation = selectRandom nearestTerrainObjects [player, ["HOUSE", "CHURCH", "CHAPEL"], 5000];
@@ -24,7 +22,7 @@ openMap true;
 
 sleep 5;
 
-["showNotification", ["CIVILIAN MISSION", "Deliver Resources - Transport the Cargo to the Destination", "info"]] call FLO_fnc_intelSystem;
+["STR_FLO_MISSIONCIV_TITLE", "STR_FLO_MISSIONCIV_DELIVER", "info"] call FLO_fnc_sendNotification;
 
 //////GROUPS/////////////////////////////////////////////////////////////////////////////////////////
 
@@ -50,7 +48,7 @@ private _MMarks = allMapMarkers select { markerText _x == 'Deliver Resources'};
 private _M = [_MMarks,  thisTrigger] call BIS_fnc_nearestPosition;
 deleteMarker _M ; 
 
-[] execVM 'Scripts\ReputationPlus.sqf';
+[0.35, 'increase'] call FLO_fnc_adjustReputation;
 
 execVM 'Scripts\Civ_Relations.sqf';
 

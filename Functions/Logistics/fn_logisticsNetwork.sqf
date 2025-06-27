@@ -1,481 +1,145 @@
 /*
-    Function: FLO_fnc_logisticsNetwork
-    
-    Description:
-    Manages the logistics network that distributes supplies to frontline outposts.
-    Uses resource system to allocate supplies, which boosts garrison strength over time.
-    
-    Parameters:
-    _mode - The function mode to execute ["init", "update", "calculateRoute", "getSupplyLevel"] (String)
-    _params - Parameters based on mode (Array)
-        init: [] - Initialize the logistics network
-        update: [] - Force an update of all supply routes
-        calculateRoute: [_sourceMarker, _targetMarker] - Calculate and establish a supply route
-        getSupplyLevel: [_marker] - Get current supply level for a marker
-    
-    Returns:
-    Based on mode:
-        init: HashMapObject - The logistics network object
-        update: Nothing
-        calculateRoute: Boolean - Success of route creation
-        getSupplyLevel: Number - Current supply level (0-100)
+ * Function: FLO_fnc_logisticsNetwork
+ * Author: Frontline Operations Development Group
+ * Description:
+ * Simple logistics system that replaces destroyed virtual groups.
+ * Monitors virtual groups and creates replacements when needed.
 */
 
 if (!isServer) exitWith {};
 
-params [
-    ["_mode", "", [""]],
-    ["_params", [], [[]]]
-];
-
-private _result = false;
-
 // Initialize the Logistics Network object if it doesn't exist
 if (isNil "FLO_Logistics_Network") then {
-    // Define the Logistics Network class with its methods and properties
     private _logisticsNetworkClass = [
-        // Class identifier
         ["#type", "LogisticsNetwork"],
         
-        // Properties
-        ["supplyRoutes", createHashMap],
-        ["supplyLevels", createHashMap],
         ["lastUpdate", time],
+        ["initialComposition", createHashMap],
         
-        // Constructor - Called when object is created
         ["#create", {
-            _self set ["supplyRoutes", createHashMap];
-            _self set ["supplyLevels", createHashMap];
             _self set ["lastUpdate", time];
-            ["Logistics", 3, "Network initialized"] call FLO_fnc_log;
-        }],
+            
+            // Wait for virtualization system to initialize
+            waitUntil { !isNil "FLO_virtualGroups" && {!isNil "InitializationOG"} && {InitializationOG}};
+            
+            // Store initial group composition
+            private _allGroups = FLO_virtualGroups get "_groups";
+            private _initialComposition = createHashMap;
+            
+            {
+                private _groupType = _y get "groupType";
+                _initialComposition set [_groupType, (_initialComposition getOrDefault [_groupType, 0]) + 1];
+            } forEach _allGroups;
+            
+            _self set ["initialComposition", _initialComposition];
+            
+            ["LOGISTICS", 3, format["Network initialized with composition: %1", _initialComposition]] call FLO_fnc_log;
         
-        // Initialize logistics network and start update loop
-        ["initialize", {
             // Start the update loop
             [] spawn {
                 while {true} do {
-                    // Update supply levels every 5 minutes
-                    ["update", []] call FLO_fnc_logisticsNetwork;
-                    sleep 300;
+                    FLO_Logistics_Network call ["checkAndReplaceGroups", []];
+                    sleep 300; // Check every 5 minutes
                 };
             };
         }],
         
-        // Calculate and establish a supply route between two markers
-        ["calculateSupplyRoute", {
-            params ["_sourceMarker", "_targetMarker"];
+        ["checkAndReplaceGroups", {
+            // Get all groups
+            private _allGroups = FLO_virtualGroups get "_groups";
+            private _destroyedGroups = [];
+            private _currentComposition = createHashMap;
             
-            if (_sourceMarker == "" || _targetMarker == "") exitWith {
-                ["Logistics", 1, "Error: Empty marker name for supply route"] call FLO_fnc_log;
-                false
-            };
-            
-            private _sourcePos = getMarkerPos _sourceMarker;
-            private _targetPos = getMarkerPos _targetMarker;
-            
-            if (_sourcePos isEqualTo [0,0,0] || _targetPos isEqualTo [0,0,0]) exitWith {
-                ["Logistics", 1, format["Error: Invalid marker position for route %1 -> %2", _sourceMarker, _targetMarker]] call FLO_fnc_log;
-                false
-            };
-            
-            // Calculate distance
-            private _distance = _sourcePos distance _targetPos;
-            
-            // Calculate route quality based on distance and road connections
-            private _routeQuality = 0;
-            
-            // Better quality for shorter distances
-            if (_distance < 1000) then {
-                _routeQuality = 0.9;
-            } else {
-                if (_distance < 3000) then {
-                    _routeQuality = 0.75;
-                } else {
-                    if (_distance < 5000) then {
-                        _routeQuality = 0.5;
-                    } else {
-                        _routeQuality = 0.3;
-                    };
-                };
-            };
-            
-            // Check for road connections to improve route quality
-            private _roads = _sourcePos nearRoads 200;
-            private _targetRoads = _targetPos nearRoads 200;
-            
-            if (count _roads > 0 && count _targetRoads > 0) then {
-                _routeQuality = _routeQuality min 0.95;
-            };
-            
-            // Store the route
-            private _supplyRoutes = _self get "supplyRoutes";
-            _supplyRoutes set [_targetMarker, [_sourceMarker, _routeQuality, _distance, time]];
-            
-            // Initialize supply level if not exist
-            private _supplyLevels = _self get "supplyLevels";
-            if (!(_targetMarker in keys _supplyLevels)) then {
-                _supplyLevels set [_targetMarker, 0];
-            };
-            
-            ["Logistics", 4, format["Supply route established: %1 -> %2 (Quality: %3)", _sourceMarker, _targetMarker, _routeQuality]] call FLO_fnc_log;
-            true
-        }],
-        
-        // Get all valid supply depots (typically headquarters or larger outposts)
-        ["getSupplyDepots", {
-            private _depots = [];
-            
-            // Find all OPFOR headquarters and outposts that can serve as supply depots
-            private _opforInstallations = allMapMarkers select {
-                markerColor _x in ["colorOPFOR", "ColorEAST"] && 
-                markerType _x in ["n_support", "o_installation", "n_installation"]
-            };
-            
-            // Check each installation if it's a valid supply depot
+            // Count current groups by type
             {
-                private _marker = _x;
-                private _pos = getMarkerPos _marker;
+                private _groupType = _y get "groupType";
+                _currentComposition set [_groupType, (_currentComposition getOrDefault [_groupType, 0]) + 1];
+            } forEach _allGroups;
+            
+            // Compare with initial composition and find missing types
+            private _initialComposition = _self get "initialComposition";
+            {
+                private _groupType = _x;
+                private _currentCount = _currentComposition getOrDefault [_groupType, 0];
+                private _targetCount = _initialComposition getOrDefault [_groupType, 0];
                 
-                // Must not be under attack or contested
-                private _nearbyUnits = _pos nearEntities [["Man", "Car", "Tank"], 500];
-                private _isContested = false;
+                // If we have fewer groups of this type than initial, add them to destroyed list
+                for "_i" from _currentCount to (_targetCount - 1) do {
+                    _destroyedGroups pushBack ["", _groupType];
+                };
                 
+            } forEach (keys _initialComposition);
+            
+            // Replace destroyed groups if we have resources
+            if (count _destroyedGroups > 0) then {
+                private _resources = FLO_OPFOR_Resources call ["getResources", []];
+
+                // All OPFOR objectives
+                private _opforObjs = keys FLO_Objectives select {
+                    (FLO_Objectives get _x getOrDefault ["owner", east]) isEqualTo east
+                };
+
+                if (count _opforObjs == 0) exitWith {};
+
+                // Determine spawn objective farthest from players
+                private _spawnObjective = [_opforObjs, [], {
+                    private _pos = (FLO_Objectives get _x get "position");
+                    private _dist = 0; { _dist = _dist + (_pos distance2D _x); } forEach allPlayers;
+                    -_dist
+                }, "ASCEND"] call BIS_fnc_sortBy select 0;
+
+                // Objectives with nearby BLUFOR presence
+                private _reinforceObjs = _opforObjs select {
+                    private _pos = (FLO_Objectives get _x get "position");
+                    private _near = allPlayers select { side _x == west && _x distance2D _pos < 2000 };
+                    count _near > 0
+                };
+
+                if (count _reinforceObjs == 0) exitWith {};
+
                 {
-                    if (side _x == west) exitWith {
-                        _isContested = true;
+                    _x params ["", "_groupType"];
+                    private _groupCost = switch (_groupType) do {
+                        case "infantry": { 4 };
+                        case "motorized": { 9 };
+                        case "mechanized": { 12 };
+                        case "armor": { 16 };
+                        case "helicopter": { 19 };
+                        case "air": { 24 };
+                        case "artillery": { 14 };
+                        default { 4 };
                     };
-                } forEach _nearbyUnits;
-                
-                if (!_isContested) then {
-                    _depots pushBack _marker;
-                };
-            } forEach _opforInstallations;
-            
-            ["Logistics", 4, format["Found %1 valid supply depots", count _depots]] call FLO_fnc_log;
-            _depots
-        }],
-        
-        // Get all frontline outposts that need supplies
-        ["getFrontlineOutposts", {
-            private _outposts = [];
-            private _priorityOutposts = []; // High priority outposts (o_support and n_support)
-            private _secondaryOutposts = []; // Secondary priority outposts
-            
-            // Find all OPFOR positions that can receive supplies
-            private _opforPositions = allMapMarkers select {
-                markerColor _x in ["colorOPFOR", "ColorEAST"] && 
-                markerType _x in ["o_support", "n_support", "o_installation", "n_installation", 
-                                  "loc_Power", "o_recon", "o_service", "o_antiair", "loc_Ruin"]
+
+                    if (_resources >= _groupCost) then {
+                        private _reinforceObjective = selectRandom _reinforceObjs;
+                        private _spawnPos = FLO_Objectives get _spawnObjective get "position";
+                        private _reinforcePos = FLO_Objectives get _reinforceObjective get "position";
+
+                        // Waypoints from cached objective link
+                        private _path = [_spawnObjective, _reinforceObjective] call FLO_fnc_getObjectivePath;
+                        if (count _path == 0) then { _path = [_reinforcePos]; };
+                        private _wps = [];
+                        { _wps pushBack [_x, "MOVE", "SAFE", "NORMAL", "COLUMN", "GREEN", 20]; } forEach _path;
+
+                        private _unitCount = [_groupType] call FLO_fnc_getGroupTypeCount;
+                        if ((FLO_OPFOR_Resources call ["spendResources", [_groupCost, "reinforcement"]]) isEqualTo true) then {
+                            private _newGroupId = [_spawnPos, _groupType, nil, _reinforceObjective, _unitCount] call FLO_fnc_createVirtualGroup;
+                            if (_newGroupId != "") then {
+                                private _groupData = (FLO_virtualGroups get "_groups") get _newGroupId;
+                                _groupData set ["isReinforcing", true];
+                                [_newGroupId, _wps, false] call FLO_fnc_updateVirtualGroupWaypoints;
+
+                                ["LOGISTICS", 3, format["Created replacement %1 group from %2 to %3",
+                                    _groupType, _spawnObjective, _reinforceObjective]] call FLO_fnc_log;
+                                _resources = _resources - _groupCost;
+                            };
+                        };
+                    };
+                } forEach _destroyedGroups;
             };
-            
-            // Check for frontline positions
-            {
-                private _marker = _x;
-                private _pos = getMarkerPos _marker;
-                
-                // Check for nearby BLUFOR areas to determine if it's frontline
-                private _nearbyMarkers = allMapMarkers select {
-                    markerColor _x in ["colorBLUFOR", "ColorWEST", "ColorYellow"] && 
-                    (getMarkerPos _x) distance _pos < 3000
-                };
-                
-                if (count _nearbyMarkers > 0) then {
-                    // Sort outposts by priority
-                    private _markerType = markerType _marker;
-                    if (_markerType in ["o_support", "n_support"]) then {
-                        _priorityOutposts pushBack _marker;
-                    } else {
-                        _secondaryOutposts pushBack _marker;
-                    };
-                };
-            } forEach _opforPositions;
-            
-            // Combine lists with priority outposts first
-            _outposts = _priorityOutposts + _secondaryOutposts;
-            
-            ["Logistics", 4, format["Found %1 outposts (%2 high priority) that need supplies", 
-                count _outposts, count _priorityOutposts]] call FLO_fnc_log;
-            
-            _outposts
-        }],
-        
-        // Update all supply routes and levels
-        ["updateSupplyNetwork", {
-            private _supplyRoutes = _self get "supplyRoutes";
-            private _supplyLevels = _self get "supplyLevels";
-            
-            // Get all valid supply depots and frontline outposts
-            private _depots = _self call ["getSupplyDepots", []];
-            private _outposts = _self call ["getFrontlineOutposts", []];
-            
-            // Create or update routes for outposts that don't have one
-            {
-                private _outpost = _x;
-                
-                // Skip if already has a route
-                if (_outpost in keys _supplyRoutes) then {
-                    // Update existing route
-                    private _routeData = _supplyRoutes get _outpost;
-                    _routeData params ["_source", "_quality", "_distance", "_timestamp"];
-                    
-                    // Check if source is still valid
-                    if (!(_source in _depots)) then {
-                        // Need to find a new source
-                        _supplyRoutes deleteAt _outpost;
-                        
-                        // Find closest valid depot
-                        private _outpostPos = getMarkerPos _outpost;
-                        private _closestDepot = "";
-                        private _closestDistance = 999999;
-                        
-                        {
-                            private _depotPos = getMarkerPos _x;
-                            private _dist = _outpostPos distance _depotPos;
-                            
-                            if (_dist < _closestDistance) then {
-                                _closestDepot = _x;
-                                _closestDistance = _dist;
-                            };
-                        } forEach _depots;
-                        
-                        if (_closestDepot != "") then {
-                            _self call ["calculateSupplyRoute", [_closestDepot, _outpost]];
-                        };
-                    };
-                } else {
-                    // No route, create new one
-                    // Find closest depot
-                    private _outpostPos = getMarkerPos _outpost;
-                    private _closestDepot = "";
-                    private _closestDistance = 999999;
-                    
-                    {
-                        private _depotPos = getMarkerPos _x;
-                        private _dist = _outpostPos distance _depotPos;
-                        
-                        if (_dist < _closestDistance) then {
-                            _closestDepot = _x;
-                            _closestDistance = _dist;
-                        };
-                    } forEach _depots;
-                    
-                    if (_closestDepot != "") then {
-                        _self call ["calculateSupplyRoute", [_closestDepot, _outpost]];
-                    };
-                };
-            } forEach _outposts;
-            
-            // Process reinforcements for outposts with established supply routes
-            {
-                private _outpost = _x;
-                
-                // Get the garrison data for this outpost
-                private _garrisonData = [];
-                if (!isNil "FLO_Garrison_Manager") then {
-                    private _garrisons = FLO_Garrison_Manager get "garrisons";
-                    if (_outpost in keys _garrisons) then {
-                        _garrisonData = _garrisons get _outpost;
-                    };
-                };
-                
-                // Only process if garrison data exists 
-                if (count _garrisonData > 0) then {
-                    private _units = _garrisonData select 0;
-                    
-                    // Check if this garrison is already activated (has units spawned)
-                    private _isActivated = count (_units select {alive _x}) > 0;
-                    
-                    // Only reinforce non-activated garrisons
-                    if (!_isActivated) then {
-                        // Determine reinforcement amount based on marker type
-                        private _markerType = markerType _outpost;
-                        private _reinforceAmount = 2; // Default amount
-                        
-                        // Higher reinforcements for important outposts
-                        switch (_markerType) do {
-                            case "o_installation": { _reinforceAmount = 6; };
-                            case "n_installation": { _reinforceAmount = 8; };
-                            case "o_support": { _reinforceAmount = 5; };
-                            case "n_support": { _reinforceAmount = 6; };
-                            case "loc_Power": { _reinforceAmount = 4; };
-                            case "o_service": { _reinforceAmount = 3; };
-                            case "o_antiair": { _reinforceAmount = 4; };
-                            case "loc_Ruin": { _reinforceAmount = 5; };
-                        };
-                        
-                        // Consider distance from supply depot for reinforcement amount
-                        private _routeData = _supplyRoutes getOrDefault [_outpost, []];
-                        if (count _routeData > 0) then {
-                            private _distance = _routeData select 2;
-                            
-                            // Reduce reinforcements for distant outposts
-                            if (_distance > 3000) then {
-                                _reinforceAmount = round (_reinforceAmount * 0.7);
-                            };
-                        };
-                        
-                        // Check available resources and only reinforce if we have enough
-                        private _availableResources = ["get", []] call FLO_fnc_opforResources;
-                        if (_availableResources >= _reinforceAmount) then {
-                            // 20% chance to add a vehicle reinforcement if we have enough resources
-                            private _addVehicle = false;
-                            private _isHeavyVehicle = false;
-                            private _vehicleCost = 0;
-                            
-                            if (random 1 < 0.2 && _availableResources >= (_reinforceAmount + 5)) then {
-                                // Determine vehicle type based on marker type
-                                private _markerType = markerType _outpost;
-                                
-                                // Higher chance of heavy vehicles at important installations
-                                if (_markerType in ["n_installation", "o_installation"] && random 1 < 0.3) then {
-                                    // 30% chance of heavy vehicle at major installations
-                                    _isHeavyVehicle = true;
-                                } else {
-                                    if (_markerType in ["n_support", "o_support"] && random 1 < 0.2) then {
-                                        // 20% chance of heavy vehicle at support locations
-                                        _isHeavyVehicle = true;
-                                    } else {
-                                        if (_markerType == "o_antiair" && random 1 < 0.4) then {
-                                            // 40% chance of heavy vehicle at AA sites
-                                            _isHeavyVehicle = true;
-                                        };
-                                    };
-                                };
-                                
-                                // Calculate vehicle cost
-                                _vehicleCost = if (_isHeavyVehicle) then {10} else {5};
-                                
-                                // Only add vehicle if we have enough resources
-                                if (_availableResources >= (_reinforceAmount + _vehicleCost)) then {
-                                    _addVehicle = true;
-                                };
-                            };
-                            
-                            // Call garrison reinforce function with vehicle flag
-                            FLO_Garrison_Manager call ["reinforceGarrison", [_outpost, _reinforceAmount, _addVehicle]];
-                            
-                            // Create the actual vehicle if needed
-                            if (_addVehicle) then {
-                                // Spend resources for both units and vehicle
-                                ["spend", [_reinforceAmount + _vehicleCost]] call FLO_fnc_opforResources;
-                                
-                                ["Logistics", 4, format["Reinforcing garrison at %1 with %2 units and 1 vehicle, spending %3 resources", 
-                                    _outpost, _reinforceAmount, _reinforceAmount + _vehicleCost]] call FLO_fnc_log;
-                            } else {
-                                // Just spend resources for units
-                                ["spend", [_reinforceAmount]] call FLO_fnc_opforResources;
-                                
-                                ["Logistics", 4, format["Reinforcing non-activated garrison at %1 with %2 units", 
-                                    _outpost, _reinforceAmount]] call FLO_fnc_log;
-                            };
-                        };
-                    };
-                };
-            } forEach keys _supplyRoutes;
-            
-            // Clean up any invalid routes
-            private _toDelete = [];
-            {
-                private _target = _x;
-                
-                // Check if target marker still exists
-                if (getMarkerPos _target isEqualTo [0,0,0]) then {
-                    _toDelete pushBack _target;
-                    continue;
-                };
-                
-                // Check if the marker changed sides (captured by BLUFOR)
-                if (markerColor _target in ["colorBLUFOR", "ColorWEST"]) then {
-                    _toDelete pushBack _target;
-                    ["Logistics", 4, format["Route removed - target %1 was captured by BLUFOR", _target]] call FLO_fnc_log;
-                };
-            } forEach keys _supplyRoutes;
-            
-            {
-                _supplyRoutes deleteAt _x;
-                _supplyLevels deleteAt _x;
-            } forEach _toDelete;
-            
-            // Update timestamp
-            _self set ["lastUpdate", time];
-            
-            // Log detailed statistics
-            if (count keys _supplyRoutes > 0) then {
-                // Count routes by target marker type
-                private _routesByType = createHashMap;
-                {
-                    private _targetMarker = _x;
-                    private _targetType = markerType _targetMarker;
-                    
-                    private _count = _routesByType getOrDefault [_targetType, 0];
-                    _routesByType set [_targetType, _count + 1];
-                } forEach keys _supplyRoutes;
-                
-                // Build log message
-                private _logDetails = "";
-                {
-                    private _type = _x;
-                    private _count = _routesByType get _type;
-                    _logDetails = _logDetails + format ["%1: %2, ", _type, _count];
-                } forEach keys _routesByType;
-                
-                // Remove trailing comma and space if needed
-                if (_logDetails != "") then {
-                    _logDetails = _logDetails select [0, count _logDetails - 2];
-                };
-                
-                ["Logistics", 4, format["Supply network updated. %1 active routes. By type: %2", 
-                    count keys _supplyRoutes, _logDetails]] call FLO_fnc_log;
-            } else {
-                ["Logistics", 4, "Supply network updated. No active routes."] call FLO_fnc_log;
-            };
-        }],
-        
-        // Get supply level for a marker
-        ["getMarkerSupplyLevel", {
-            params ["_marker"];
-            
-            private _supplyLevels = _self get "supplyLevels";
-            _supplyLevels getOrDefault [_marker, 0]
         }]
     ];
     
-    // Create the logistics network object
+    // Create and initialize the network
     FLO_Logistics_Network = createHashMapObject [_logisticsNetworkClass];
 };
-
-// Execute the requested mode
-switch (_mode) do {
-    // Initialize the logistics network
-    case "init": {
-        FLO_Logistics_Network call ["initialize", []];
-        _result = FLO_Logistics_Network;
-    };
-    
-    // Force an update of all supply routes
-    case "update": {
-        FLO_Logistics_Network call ["updateSupplyNetwork", []]
-    };
-    
-    // Calculate and establish a supply route
-    case "calculateRoute": {
-        _params params [
-            ["_sourceMarker", "", [""]],
-            ["_targetMarker", "", [""]]
-        ];
-        
-        _result = FLO_Logistics_Network call ["calculateSupplyRoute", [_sourceMarker, _targetMarker]]
-    };
-    
-    // Get current supply level for a marker
-    case "getSupplyLevel": {
-        _params params [
-            ["_marker", "", [""]]
-        ];
-        
-        _result = FLO_Logistics_Network call ["getMarkerSupplyLevel", [_marker]]
-    };
-};
-
-_result 

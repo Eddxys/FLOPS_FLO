@@ -3,10 +3,7 @@ class FLO {
         file = "Functions";
 
         class MissionSave       {};
-        class MissionFrontline  {};
         class MissionStartup    {};
-        class CDVS              {};
-        class ICS               {};
         class MissionLoad       {preInit = 1;};
         class initializeFOB     {};
         class initializeOP      {};
@@ -15,32 +12,65 @@ class FLO {
     class AI {
         file = "Functions\AI";
 
-        class artilleryPrep                     {};
-        class airRecon                          {};
-        class airSupport                        {};
-        class executeAttackPattern              {};
-        class fireObserver                      {};
-        class calculateQRFResponse              {};
-        class requestQRF                        {};
-        class requestOffensiveOps               {};
-        class heliInsert                        {};
+        class artilleryAssetManager             {};
+        class airAssetManager                   {};
+        class requestVirtualArtillery           {};
+        class precisionStrike                   {};
+        class airTaskOrder                      {};
         class aiCommander                       {};
         class aiCommanderUnitCapabilityAnalyzer {};
     };
+    
+    class Interactions {
+        file = "Functions\AI\Interactions";
 
-    class Actions {
-        file = "Functions\AI\Actions";
+        class civilianRelations {};
+        class civilianInvestigate {};
+    };
 
-        class attackArea        {};
-        class defendArea        {};
-        class patrolArea        {};
-        class reconArea         {};
-        class taskAttack        {};
-        class taskDefend        {};
-        class taskPatrol        {};
-        class addWaypoint       {};
-        class reconAreaAction   {};
-        class getTargetType     {};
+    class Virtualization {
+        file = "Functions\Virtualization";
+        
+        class initVirtualization              {};
+        class createVirtualGroupMarker        {};
+        class createVirtualWaypointMarkers    {};
+        class virtualGroupsUpdateLoop         {};
+        class activateVirtualGroup            {};
+        class deactivateVirtualGroup          {};
+        class createVirtualGroup              {};
+        class updateVirtualGroupWaypoints     {};
+        class initializeObjectiveGroups       {};
+        class toggleVirtualizationDebug       {};
+        class distributeVirtualGroups         {};
+        class activateSavedVirtualGroup       {};
+        class createVirtualCivilianPopulation {};
+    };
+
+    class VirtualizationUtilities {
+        file = "Functions\Virtualization\Utilities";
+        
+        class filterNonCivGroups {};
+        class getGroupTypeCount  {};
+        class getRoadParkingPos  {};
+        class getSafeUnvirtualizePos {};
+    };
+
+    class Objective {
+        file = "Functions\Objective";
+        
+        class indexObjectives           {};
+        class indexVirtualObjectives    {};
+        class buildObjectiveGraph       {};
+        class flipObjective             {};
+        class monitorObjectiveDominance {};
+    };
+
+    class ObjectiveUtilities {
+        file = "Functions\Objective\Utilities";
+        
+        class getRandomObjectivePos {};
+        class getNearestObjective   {};
+        class getObjectivePath      {};
     };
 
     class Logistics {
@@ -51,35 +81,81 @@ class FLO {
         class logisticsNetwork      {};
     };
 
-    class TaskForce {
-        file = "Functions\TaskForce";
+    class Intelligence {
+        file = "Functions\Logistics\Intelligence";
 
-        class TaskForceSystem      {};
-        class TaskForceDefenseLine {};
+        class militaryIntel {};
+        class civilianIntel {};
+        class revealRandomEnemyGroup {};
     };
 
     class Arsenal {
         file = "Functions\Arsenal";
 
-        class restrictedArsenal     {};
-    };
-    
-    class Objective {
-        file = "Functions\Objective";
-        
-        class garrisonManager         {};
-        class vehicleGarrison         {};
-        class finalizeObjectiveFlip   {};
-        class flipObjective           {};
-        class setupCaptureSystem      {};
+        class restrictedArsenal         {};
+        class addCratePurchaseActions   {};
+        class cancelCrate               {};
+        class checkCratePurchase        {};
+        class finalizeCrate             {};
+        class getFunds                  {};
+        class placeCrate                {};
+        class purchaseCrate             {};
+        class updateFunds               {};
     };
 
     class Utilities {
         file = "Functions\Utilities";
 
-        class findNearestMarker   {};
-        class log                 {};
-        class addReward           {};
-        class notification        {};
+        class log                       {};
+        class addReward                 {};
+        class getRandomMagazine         {};
+        class heartbeat                 {};
+        class showDynamicText           {};
+        class addIntelServer            {};
+        class sendRewardNotification    {};
+        class sendNotification          {};
+        class displayNotification       {};
+        class adjustAggression          {};
+        class adjustReputation          {};
+    };
+
+    class SideMissions {
+        file = "Functions\SideMissions";
+
+        class registerSideMission       {};
+        class startSideMission          {};
+        class registerDefaultMissions   {};
+        class sideMissionPilot          {};
+        class sideMissionSquad          {};
+        class sideMissionConvoy         {};
+        class sideMissionCustomConvoy   {};
+        class sideMissionPatrol         {};
+        class sideMissionSabotage       {};
+        class sideMissionPOW            {};
+        class sideMissionIntel          {};
+    };
+
+    class SideMissionUtilities {
+        file = "Functions\SideMissions\Utilities";
+
+        class addIntelItems    {};
+        class findMissionHouse {};
+    };
+    
+    class Misc {
+        file = "Functions\Misc";
+        
+        class ragequitBlocker     {};
+        class disableSystemChat   {};
+    };
+
+    class Pathfinding {
+        file = "Functions\Pathfinding";
+
+        class initPFScheduler   {preInit = 1;};
+        class initSearch        {preInit = 1;};
+        class initRoadGraph     {preInit = 1;};
+        class findRoadPath      {};
+        class findRoadPathSync  {};
     };
 };

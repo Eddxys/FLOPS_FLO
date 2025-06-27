@@ -62,54 +62,59 @@ if (_preserveMarker && {_opBuilding getVariable ["FLO_OP_MarkersRestored", false
     };
 };
 
+private _RestrictedArsenalVal = "RestrictedArsenal" call BIS_fnc_getParamValue;
+if (_RestrictedArsenalVal isEqualTo 0) then {
+    [_opBuilding] call FLO_fnc_restrictArsenalBox;
+    [_opBuilding] remoteExec ["FLO_fnc_addCratePurchaseActions", 0, true];
+};
+
 // Initialize creation factory
 if (!isNil "_opBuilding" && {!isNull _opBuilding}) then {
-    [[_opBuilding, -1, west, "LIGHT"], "R3F_LOG\USER_FUNCT\init_creation_factory.sqf"] remoteExec ["execVM", 0, true];
+    [_opBuilding, [
+        "<img size=2 color='#FF0000' image='\a3\ui_f\data\igui\cfg\simpletasks\types\Use_ca.paa'/><t font='PuristaBold' color='#FF0000'>Build Mode", 
+        { [player] call IDS_Logistics_fnc_initBuildCamera; }, 
+        nil, 
+        1.4, 
+        false, 
+        true, 
+        "", 
+        "!IDS_Logistics_isHolding"
+    ]] remoteExec ["addAction", 0, true];
 } else {
     ["OP", 2, "Failed to initialize OP creation factory - _opBuilding is nil or null"] call FLO_fnc_log;
 };
 
 // Add Arsenal action
-[ _opBuilding,
-"<img size=2 color='#FFE258' image='Screens\FOBA\mg_ca.paa'/><t font='PuristaBold' color='#FFE258'>ARSENAL",
-"Screens\FOBA\mg_ca.paa",
-"Screens\FOBA\mg_ca.paa",
-    "_this distance _target < 10",            
-    "_caller distance _target < 10",    
-{},
-{},
-{
-    if (isClass (configfile >> "ace_arsenal_loadoutsDisplay") isEqualTo true) then {
-        [player, player, true] call ace_arsenal_fnc_openBox;
-    } else {
-        ["Open", true] spawn BIS_fnc_arsenal;
-    };
-},
-{},
-[],
-1,
-1,
-false,
-false
-] remoteExec ["BIS_fnc_holdActionAdd",0,true];   
+[_opBuilding, [
+    "<img size=2 color='#FFE258' image='Screens\FOBA\mg_ca.paa'/><t font='PuristaBold' color='#FFE258'>ARSENAL",
+    {
+        if (isClass (configfile >> "ace_arsenal_loadoutsDisplay") isEqualTo true) then {
+            [player, player, true] call ace_arsenal_fnc_openBox;
+        } else {
+            ["Open", true] spawn BIS_fnc_arsenal;
+        };
+    },
+    nil,
+    1,
+    true,
+    true,
+    "",
+    "_this distance _target < 10"
+]] remoteExec ["addAction", 0, true];
 
 // Add Pack OP action
-[_opBuilding,
-"<img size=2 color='#7CC2FF' image='Screens\FOBA\b_hq.paa'/><t font='PuristaBold' color='#7CC2FF'>Pack OP",
-"Screens\FOBA\b_hq.paa",
-"Screens\FOBA\b_hq.paa",
-"true",       
-"_caller distance _target < 40",  
-{},
-{},
-{execVM 'Scripts\PObjectives\OPPACK.sqf';},
-{},
-[],
-5,
-2,
-false,
-false
-] remoteExec ["BIS_fnc_holdActionAdd",0,true];   
+[_opBuilding, [
+    "<img size=2 color='#7CC2FF' image='Screens\FOBA\b_hq.paa'/><t font='PuristaBold' color='#7CC2FF'>Pack OP",
+    {
+        execVM 'Scripts\PObjectives\OPPACK.sqf';
+    },
+    nil,
+    2,
+    true,
+    true,
+    "",
+    "_this distance _target < 40"
+]] remoteExec ["addAction", 0, true];
 
 // Add Request Menu action
 [_opBuilding,[
@@ -138,15 +143,15 @@ _CIVTRG setTriggerStatements [
 _CIVIL = (nearestObjects [thisTrigger ,['Man'], 7] select {(alive _x) && ((side _x) isEqualTo civilian)}) select 0 ;
   
 if (_CIVIL getUnitTrait 'engineer' isEqualTo true) then {
-    [50, 'INSURGENT'] call FLO_fnc_notification ;
+    [50, 'STR_FLO_INSURGENT'] call FLO_fnc_sendRewardNotification ;
     [50] call FLO_fnc_addReward;
     deleteVehicle _CIVIL ; 
-    [] execVM 'Scripts\INTL_Civ.sqf';    
-    [] execVM 'Scripts\ReputationPlus.sqf';
+    [] call FLO_fnc_civilianIntel;   
+    [0.35, 'increase'] call FLO_fnc_adjustReputation;
 } else {
-    [0, 'CIVILIAN'] call FLO_fnc_notification ;
+    [0, 'STR_FLO_CIVILIAN'] call FLO_fnc_sendRewardNotification ;
     deleteVehicle _CIVIL ; 
-    [] execVM 'Scripts\ReputationMinus.sqf';
+    [-0.35, 'decrease'] call FLO_fnc_adjustReputation;
 };
 ", ""]; 
 
@@ -160,10 +165,10 @@ _TFOBA setTriggerActivation ["NONE", "PRESENT", true];
 _TFOBA setTriggerStatements [  
 "count (nearestobjects [thisTrigger,['CargoNet_01_box_F'],3]) > 0 ",  
 "  
-_RES = nearestobjects [thisTrigger,['CargoNet_01_box_F'],10] select 0 ;    
-deleteVehicle _RES ; 
-    [100, 'RESOURCE'] call FLO_fnc_notification ;
-[100, thisTrigger] execVM 'Scripts\Reward_Supplies.sqf';
+    _RES = nearestobjects [thisTrigger,['CargoNet_01_box_F'],10] select 0;    
+    deleteVehicle _RES; 
+    [100, 'STR_FLO_RESOURCE'] call FLO_fnc_sendRewardNotification;
+    [100, thisTrigger] execVM 'Scripts\Reward_Supplies.sqf';
 ", ""]; 
 
 _TFOBA attachTo [_opBuilding, [0, 0, 0]]; 

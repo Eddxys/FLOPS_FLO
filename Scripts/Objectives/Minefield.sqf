@@ -1,8 +1,6 @@
 params ["_pos"]; 
 
-private _mrkrs = allMapMarkers select {markerColor _x == "Color6_FD_F"};
-private _mrkr = _mrkrs select 0;
-private _AGGRSCORE = parseNumber (markerText _mrkr) ;  
+private _AGGRSCORE = FLO_DifficultyHandle get "value";
 
 private _mines = [];
 private _mineCount = 10; // Default mine count
@@ -58,9 +56,9 @@ for "_i" from 1 to _mineCount do {
                 deleteMarker _M;
             };
 
-            [100, "MINEFIELD"] call FLO_fnc_notification;
+            [100, "STR_FLO_MINEFIELD"] call FLO_fnc_sendRewardNotification;
             [100] call FLO_fnc_addReward;
-            [] execVM "Scripts\ReputationPlus.sqf";
+            [0.35, 'increase'] call FLO_fnc_adjustReputation;
             execVM "Scripts\Civ_Relations.sqf";
 
             breakOut "MinefieldLoop"; // Kill the Do Loop

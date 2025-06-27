@@ -13,7 +13,7 @@ openMap true;
 
 sleep 5;
 
-["showNotification", ["CIVILIAN MISSION", "Clear Minefield - Disarm Every Mine in the Area", "info"]] call FLO_fnc_intelSystem;
+["STR_FLO_MISSIONCIV_TITLE", "STR_FLO_MISSIONCIV_MINE", "info"] call FLO_fnc_sendNotification;
 
 
 private _V = createVehicle [ selectRandom CivVehArray, getpos _nearRoad, [], 4, "NONE"]; 
@@ -46,7 +46,7 @@ deleteMarker _M ;
 
 ['ScoreAdded', ['Minefield Cleared', 00]] call BIS_fnc_showNotification;  
 
-[] execVM 'Scripts\ReputationPlus.sqf';
+[0.35, 'increase'] call FLO_fnc_adjustReputation;
 
 execVM 'Scripts\Civ_Relations.sqf';
 
