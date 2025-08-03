@@ -19,6 +19,7 @@ class FLO {
         class airTaskOrder                      {};
         class aiCommander                       {};
         class aiCommanderUnitCapabilityAnalyzer {};
+        class aiCommanderStagingDebug          {};
     };
     
     class Interactions {
@@ -63,6 +64,7 @@ class FLO {
         class buildObjectiveGraph       {};
         class flipObjective             {};
         class monitorObjectiveDominance {};
+        class startObjectiveGraph       {};
     };
 
     class ObjectiveUtilities {
